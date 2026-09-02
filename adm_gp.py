@@ -31,7 +31,14 @@ def u_init(
             grid.c_ens * np.ones((grid.hours_per_day, grid.horizon)),
             -grid.c_ens * np.ones((grid.wind.n_parks, grid.hours_per_day, grid.horizon)),
         ]
-    oracle_u = oracle_u_fix_y(U_HAT=U_hat, grid=grid, Y_SOLUTION=None, FIX_OBJECTIVE_COST=FIX_OBJECTIVE_COST, CONFIG=CONFIG)
+    oracle_u = oracle_u_fix_y(
+        U_HAT=U_hat,
+        grid=grid,
+        Y_SOLUTION=None,
+        FIX_OBJECTIVE_COST=FIX_OBJECTIVE_COST,
+        CONFIG=CONFIG,
+        wind_availability=X0.wind_availability,
+    )
     return oracle_u.U_FIX, oracle_u.UB_U
 
 def oracle_adm(
@@ -49,7 +56,13 @@ def oracle_adm(
         SOL_ADM_Y = oracle_y_fix_u(X0=X0, CONFIG=CONFIG, grid=grid, U_SOLUTION=U_FIX)
         LB_Y = SOL_ADM_Y.LB_Y
         Y_FIX = SOL_ADM_Y.Y_FIX
-        SOL_ADM_U = oracle_u_fix_y(U_HAT=U_hat, grid=grid, Y_SOLUTION=Y_FIX, CONFIG=CONFIG)
+        SOL_ADM_U = oracle_u_fix_y(
+            U_HAT=U_hat,
+            grid=grid,
+            Y_SOLUTION=Y_FIX,
+            CONFIG=CONFIG,
+            wind_availability=X0.wind_availability,
+        )
         UB_U = SOL_ADM_U.UB_U + SOL_ADM_Y.C_Y_x0
         U_FIX = SOL_ADM_U.U_FIX
         K += 1
@@ -96,7 +109,7 @@ def oracle_y_fix_u(
     B = battery.n_units
     T = grid.horizon
     H = grid.hours_per_day
-    n_turbines = wind.n_turbines
+    wind_availability = X0.wind_availability
     c_ens = grid.c_ens
     pmin_nr = diesel.pmin
     pmax_nr = diesel.pmax
@@ -135,10 +148,10 @@ def oracle_y_fix_u(
         gp.GRB.MINIMIZE,
     )
 
-    # (1.3)  y^r ≤ n_w P̄^r_{w,h,t}  — RHS depende de ξ; dual en la parte bilineal
+    # (1.3)  y^r ≤ A_r P̄^r_{w,h,t}  — RHS depende de ξ; dual en la parte bilineal
     c_wind = m.addConstrs(
         (
-            y_r[w, h, t] <= n_turbines[w] * p_wind[w, h, t]
+            y_r[w, h, t] <= wind_availability[w, t] * p_wind[w, h, t]
             for w in range(W) for h in range(H) for t in range(T)
         ),
         name="wind_avail",
@@ -326,6 +339,7 @@ def oracle_u_fix_y(
     Y_SOLUTION: SecondStageDispatch | None,
     FIX_OBJECTIVE_COST: np.ndarray | None = None,
     CONFIG: CCGConfig,
+    wind_availability: np.ndarray,
     ) -> ADM_U:
     """
     Algoritmo ADM Paso 4: fijar y y resolver U
@@ -334,7 +348,6 @@ def oracle_u_fix_y(
     W = grid.wind.n_parks
     T = grid.horizon
     H = grid.hours_per_day
-    n_turbines = grid.wind.n_turbines
 
     # Parametros del Uncertainty Set
     wind_set = U_HAT.wind_set
@@ -367,7 +380,10 @@ def oracle_u_fix_y(
     demand = m.addVars(H, T, lb=0.0, name="demand")
 
     m.setObjective(
-        gp.quicksum(dual_wind[w, h, t] * n_turbines[w] * p_wind[w, h, t] for w in range(W) for h in range(H) for t in range(T))
+        gp.quicksum(
+            dual_wind[w, h, t] * wind_availability[w, t] * p_wind[w, h, t]
+            for w in range(W) for h in range(H) for t in range(T)
+        )
         + gp.quicksum(dual_demand[h, t] * demand[h, t] for h in range(H) for t in range(T)),
         gp.GRB.MAXIMIZE,
     )

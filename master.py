@@ -34,13 +34,31 @@ def solve_master_problem(
     T = grid.horizon
     H = grid.hours_per_day
     K = len(SCENARIOS)
-    n_turbines = wind.n_turbines
     C_ENS = grid.c_ens
     pmin_nr = diesel.pmin
     pmax_nr = diesel.pmax
     c_var_nr = diesel.c_var
     c_on_nr = diesel.c_on
     c_fix_nr = diesel.c_fix
+
+    maint = wind.maintenance
+    Y = maint.duration_days
+    C_crew = maint.crew_cost
+    N_crew = maint.n_crew
+    M_crew = maint.m_crew
+    G_r = [int(n) for n in wind.n_turbines]
+    alpha_hat = wind.alpha_hat(T)
+    t_dw_farms = wind.t_dw_by_park
+    fall_keys = [
+        (j, w)
+        for w in range(W)
+        for j in range(G_r[w])
+        if t_dw_farms[w][j] <= T
+    ]
+    J_r = [int(sum(1 for j, ww in fall_keys if ww == w)) for w in range(W)]
+    turb_keys_failed = [(j, w, t) for j, w in fall_keys for t in range(T)]
+    v_range = range(T - Y + 1)
+    v_keys = [(j, w, t) for j, w in fall_keys for t in v_range]
 
     if CONFIG.use_batteries:
         bt_pch = battery.pch
@@ -63,6 +81,12 @@ def solve_master_problem(
     x_nr = m.addVars(G_nr, H, T, vtype=gp.GRB.BINARY, name="x_nr")
     x_on = m.addVars(G_nr, H, T, vtype=gp.GRB.BINARY, name="x_on")
 
+    v_r = m.addVars(v_keys, vtype=gp.GRB.BINARY, name="v")
+    m_r = m.addVars(turb_keys_failed, vtype=gp.GRB.BINARY, name="m")
+    a_r = m.addVars(turb_keys_failed, vtype=gp.GRB.BINARY, name="a")
+    A_r = m.addVars(W, T, lb=0.0, name="A_r")
+    x_crew = m.addVars(W, T, vtype=gp.GRB.BINARY, name="x_crew")
+
     # z del Algorithm 3.1; z ≥ L
     eta = m.addVar(lb=0, name="eta")
     m.addConstr(eta >= CONFIG.value_lower_bound, name="z_ge_L")
@@ -70,9 +94,74 @@ def solve_master_problem(
     first_stage_objective = (
         gp.quicksum(c_fix_nr[g] * x_nr[g, h, t] for g in range(G_nr) for h in range(H) for t in range(T))
         + gp.quicksum(c_on_nr[g] * x_on[g, h, t] for g in range(G_nr) for h in range(H) for t in range(T))
+        + gp.quicksum(alpha_hat[w][j, t] * v_r[j, w, t] for j, w, t in v_keys)
+        + gp.quicksum(C_crew * x_crew[w, t] for w in range(W) for t in range(T))
     )
 
     m.setObjective(first_stage_objective + eta, gp.GRB.MINIMIZE)
+
+    m.addConstrs(
+        (gp.quicksum(v_r[j, w, t] for t in v_range) == 1 for j, w in fall_keys),
+        name="maint_once",
+    )
+    m.addConstrs(
+        (
+            gp.quicksum(
+                v_r[j, w, t - k]
+                for k in range(min(Y, t + 1))
+                if t - k <= T - Y
+            )
+            == m_r[j, w, t]
+            for j, w in fall_keys
+            for t in range(T)
+        ),
+        name="maint_status",
+    )
+    m.addConstrs(
+        (
+            a_r[j, w, t] == 1 - m_r[j, w, t]
+            for j, w in fall_keys
+            for t in range(T)
+            if (t + 1) < t_dw_farms[w][j]
+        ),
+        name="availability_before",
+    )
+    m.addConstrs(
+        (
+            a_r[j, w, t]
+            == gp.quicksum(v_r[j, w, k] for k in v_range if k <= t) - m_r[j, w, t]
+            for j, w in fall_keys
+            for t in range(T)
+            if (t + 1) >= t_dw_farms[w][j]
+        ),
+        name="availability_after",
+    )
+    m.addConstrs(
+        (
+            A_r[w, t]
+            == G_r[w] - J_r[w]
+            + gp.quicksum(a_r[j, w, t] for j, ww in fall_keys if ww == w)
+            for w in range(W)
+            for t in range(T)
+        ),
+        name="wind_farm_availability",
+    )
+    m.addConstrs(
+        (
+            gp.quicksum(m_r[j, w, t] for j, ww in fall_keys if ww == w)
+            <= N_crew * x_crew[w, t]
+            for w in range(W)
+            for t in range(T)
+        ),
+        name="crew_constraint",
+    )
+    m.addConstrs(
+        (
+            gp.quicksum(x_crew[w, t] for w in range(W)) <= M_crew
+            for t in range(T)
+        ),
+        name="crew_max_constraint",
+    )
 
     if K > 0:
         y_r = m.addVars(W, H, T, K, lb=0.0, name="y_r")
@@ -96,10 +185,10 @@ def solve_master_problem(
             name="second_stage_cut",
         )
 
-        # (1.3)  y^r ≤ n_w P̄^r_{w,h,t}
+        # (1.3)  y^r ≤ A_r P̄^r_{w,h,t}
         m.addConstrs(
             (
-                y_r[w, h, t, k] <= n_turbines[w] * SCENARIOS[k].p_wind[w, h, t]
+                y_r[w, h, t, k] <= A_r[w, t] * SCENARIOS[k].p_wind[w, h, t]
                 for w in range(W) for h in range(H) for t in range(T) for k in range(K)
             ),
             name="wind_avail",
@@ -234,12 +323,24 @@ def solve_master_problem(
         dtype=float,
     )
 
-    wind_availability = np.outer(n_turbines, np.ones(T))
+    wind_availability = np.array(
+        [[A_r[w, t].X for t in range(T)] for w in range(W)],
+        dtype=float,
+    )
+    maintenance_start = {key: float(v_r[key].X) for key in v_keys}
+    maintenance_active = {key: float(m_r[key].X) for key in turb_keys_failed}
+    crews = np.array(
+        [[x_crew[w, t].X for t in range(T)] for w in range(W)],
+        dtype=float,
+    )
 
     return MasterResult(
         solution=FirstStageSolution(
             commitment=commitment,
             wind_availability=wind_availability,
+            maintenance_start=maintenance_start,
+            maintenance_active=maintenance_active,
+            crews=crews,
         ),
         objective=float(m.ObjVal),
         status=status,
