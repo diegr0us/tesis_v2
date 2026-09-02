@@ -164,29 +164,38 @@ CONFIG = CCGConfig(
     max_iterations=5,
     relative_gap=1e-2,
     value_lower_bound=0.0,
-    master_mip_gap=None,
+    master_mip_gap=1e-2,
     master_time_limit=None,
     oracle_adm_tol=1e-4,
     oracle_adm_max_iterations=100,
-    print_oracle_iterations=True,
+    print_oracle_iterations=False,
     use_batteries=True,
-    master_output_flag=0,
+    master_output_flag=1, 
     oracle_output_flag=0,
     adm_output_flag=0,
 )
 
+_NO_CERT_MSG = "sin garantía de optimalidad"
+
+
+def _format_metric(label: str, value: float | None) -> str:
+    if value is None or value == float("inf"):
+        return f"{label} ({_NO_CERT_MSG})"
+    return f"{label}={value:.6g}"
+
+
 if __name__ == "__main__":
     result = ccg_adm(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
     print(
-        f"LB={result.lower_bound:.6g}  "
-        f"UB={result.upper_bound:.6g}  "
-        f"gap={result.relative_gap:.6g}"
+        f"{_format_metric('LB', result.lower_bound)}  "
+        f"{_format_metric('UB', result.upper_bound)}  "
+        f"{_format_metric('gap', result.relative_gap)}"
     )
     for it in result.history:
         print(
             f"  iter {it.iteration}: "
-            f"LB={it.lower_bound:.6g}  "
-            f"UB={it.upper_bound:.6g}  "
-            f"gap={it.relative_gap:.6g}  "
+            f"{_format_metric('LB', it.lower_bound)}  "
+            f"{_format_metric('UB', it.upper_bound)}  "
+            f"{_format_metric('gap', it.relative_gap)}  "
             f"escenarios={it.scenario_count}"
         )

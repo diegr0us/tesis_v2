@@ -202,8 +202,8 @@ class CCGConfig:
     relative_gap: float = 1e-2
     value_lower_bound: float = 0.0   # L en z ≥ L
 
-    # Solver del maestro
-    master_mip_gap: float | None = None
+    # Solver del maestro (alineado con relative_gap por defecto)
+    master_mip_gap: float | None = 1e-2
     master_time_limit: float | None = None
 
     # ADM interior: |V_ξ − V_y| / |V_ξ| ≤ oracle_adm_tol

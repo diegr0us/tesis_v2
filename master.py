@@ -53,8 +53,9 @@ def solve_master_problem(
 
     m = gp.Model("Master Problem")
     m.Params.OutputFlag = CONFIG.master_output_flag
-    if CONFIG.master_mip_gap is not None:
-        m.Params.MIPGap = CONFIG.master_mip_gap
+    m.Params.MIPGap = (
+        CONFIG.master_mip_gap if CONFIG.master_mip_gap is not None else CONFIG.relative_gap
+    )
     if CONFIG.master_time_limit is not None:
         m.Params.TimeLimit = CONFIG.master_time_limit
 
