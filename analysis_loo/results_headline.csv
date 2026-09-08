@@ -1,0 +1,6 @@
+label,value
+baseline_ccg_lb,4237913.372959996
+baseline_wc_redispatch_ss,5435807.669248076
+baseline_wc_ens,2912.444717470847
+loo_center_mean_ss,3993390.458497773
+loo_center_max_ss,6971092.732302735

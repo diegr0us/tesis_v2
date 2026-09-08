@@ -191,6 +191,7 @@ def _build_turbines(
     component_ids: Sequence[int] | None,
     t0_obs: int | Sequence[int],
     degradation: DegradationCatalog,
+    t_dw_offset: int | Sequence[int] = 0,
     ) -> tuple[WindTurbine, ...]:
     counts = [park.n_turbines for park in parks]
     if any(n < 1 for n in counts):
@@ -208,18 +209,20 @@ def _build_turbines(
     if any(i < 1 for i in ids):
         raise ValueError("turbine_component ids must be >= 1")
     t0s = _as_int_tuple(t0_obs, n_total, "t0_obs")
+    offsets = _as_int_tuple(t_dw_offset, n_total, "t_dw_offset")
     turbines: list[WindTurbine] = []
     k = 0
     for park_index, n_park in enumerate(counts):
         for _ in range(n_park):
             boc_lower, boc_upper = degradation.boc(ids[k], t0s[k])
+            shift = offsets[k]
             turbines.append(
                 WindTurbine(
                     component_id=ids[k],
                     t0_obs=t0s[k],
                     park_index=park_index,
-                    boc_lower=boc_lower,
-                    boc_upper=boc_upper,
+                    boc_lower=boc_lower + shift,
+                    boc_upper=boc_upper + shift,
                 )
             )
             k += 1
@@ -233,17 +236,25 @@ class WindFleet:
     maintenance: MaintenancePolicy = MaintenancePolicy()
     turbine_component: Sequence[int] | None = None
     t0_obs: int | Sequence[int] = 0
+    t_dw_offset: int | Sequence[int] = 0
     turbines: tuple[WindTurbine, ...] = field(init=False)
 
     def __post_init__(self) -> None:
         turbines = _build_turbines(
-            self.parks, self.turbine_component, self.t0_obs, self.degradation
+            self.parks,
+            self.turbine_component,
+            self.t0_obs,
+            self.degradation,
+            self.t_dw_offset,
         )
         object.__setattr__(self, "turbines", turbines)
         object.__setattr__(
             self, "turbine_component", tuple(t.component_id for t in turbines)
         )
         object.__setattr__(self, "t0_obs", tuple(t.t0_obs for t in turbines))
+        object.__setattr__(
+            self, "t_dw_offset", _as_int_tuple(self.t_dw_offset, len(turbines), "t_dw_offset")
+        )
 
     @property
     def n_parks(self) -> int:
@@ -437,6 +448,10 @@ class CCGConfig:
 
     # Formulación
     use_batteries: bool = True
+
+    # Optional: fix maintenance start binaries v[j,w,t]=1 for listed (j,w,t)
+    # Used by decoupled experiments (myopic / maint-only schedules).
+    fixed_maint_starts: tuple[tuple[int, int, int], ...] | None = None
 
     # Ejecución
     master_output_flag: int = 0

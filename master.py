@@ -104,6 +104,18 @@ def solve_master_problem(
         (gp.quicksum(v_r[j, w, t] for t in v_range) == 1 for j, w in fall_keys),
         name="maint_once",
     )
+    if CONFIG.fixed_maint_starts is not None:
+        fixed = {(int(j), int(w), int(t)) for j, w, t in CONFIG.fixed_maint_starts}
+        unknown = fixed - set(v_keys)
+        if unknown:
+            raise ValueError(
+                f"fixed_maint_starts has keys not in v domain: {sorted(unknown)[:5]} ..."
+            )
+        m.addConstrs(
+            (v_r[j, w, t] == (1.0 if (j, w, t) in fixed else 0.0) for j, w, t in v_keys),
+            name="maint_fixed",
+        )
+
     m.addConstrs(
         (
             gp.quicksum(

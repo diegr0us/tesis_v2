@@ -1,0 +1,58 @@
+[
+  {
+    "policy": "joint",
+    "lb": 6472121.85619078,
+    "first_stage_cost": 213820.0,
+    "ens_mwh": 3915.10891,
+    "ens_hours": 204,
+    "n_maint": 13,
+    "start_days_1based": [
+      5,
+      8,
+      12,
+      18,
+      21,
+      28,
+      42,
+      47,
+      52,
+      55,
+      61,
+      68,
+      79
+    ],
+    "backup_mode": "slow_backup",
+    "use_batteries": false,
+    "aro_variant": "t0spread",
+    "wind_mean_box": "timesfm_s12",
+    "n_iterations": 5
+  },
+  {
+    "policy": "decoupled_full",
+    "lb": 5702979.471451146,
+    "first_stage_cost": 197320.0,
+    "ens_mwh": 2406.222519,
+    "ens_hours": 127,
+    "n_maint": 13,
+    "start_days_1based": [
+      14,
+      18,
+      22,
+      30,
+      34,
+      38,
+      46,
+      50,
+      54,
+      62,
+      66,
+      70,
+      82
+    ],
+    "backup_mode": "slow_backup",
+    "use_batteries": false,
+    "aro_variant": "t0spread",
+    "wind_mean_box": "timesfm_s12",
+    "n_iterations": 5
+  }
+]

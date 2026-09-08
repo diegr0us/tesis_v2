@@ -1,0 +1,28 @@
+{
+  "joint_iter15": {
+    "label": "joint@15",
+    "fsc": 214930.0,
+    "ccg_lb": 6779892.05186475,
+    "n_iter": 15,
+    "adm_lb_y": 8422892.47831314,
+    "adm_ub_u": 8422892.47831314,
+    "total_lb": 8637822.47831314,
+    "total_ub": 8637822.47831314,
+    "ens_adm": 3329.801181,
+    "ccg_ub": null
+  },
+  "myopic_iter15": {
+    "label": "myopic@15",
+    "fsc": 205920.0,
+    "ccg_lb": 6141535.851724852,
+    "n_iter": 15,
+    "adm_lb_y": 6898996.061062857,
+    "adm_ub_u": 6898996.061062856,
+    "total_lb": 7104916.061062857,
+    "total_ub": 7104916.061062856,
+    "ens_adm": 1832.004797,
+    "ccg_ub": null
+  },
+  "delta_myopic_minus_joint": -1532906.417250284,
+  "pct_myopic_vs_joint": -17.746445022445535
+}

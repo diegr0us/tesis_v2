@@ -1,0 +1,332 @@
+{
+  "question": "Do maintenance windows change if the battery is not considered?",
+  "answer": "YES",
+  "baseline_with_battery": "prueba_s12_t0spread",
+  "run_without_battery": "prueba_s12_t0spread_nobatt",
+  "with_battery": {
+    "n_maint": 13,
+    "start_days_0based": [
+      12,
+      15,
+      27,
+      36,
+      46,
+      49,
+      54,
+      64,
+      2,
+      22,
+      39,
+      61,
+      68
+    ],
+    "start_days_1based": [
+      13,
+      16,
+      28,
+      37,
+      47,
+      50,
+      55,
+      65,
+      3,
+      23,
+      40,
+      62,
+      69
+    ],
+    "spread_min_1b": 3,
+    "spread_max_1b": 69,
+    "spread_std_1b": 20.43549528285579,
+    "LB": 4237913.372959996,
+    "first_stage_cost": 155400.0,
+    "ENS_sum": 2912.444717470847,
+    "n_batteries": 1,
+    "use_batteries": true,
+    "aro_variant": "t0spread",
+    "wind_mean_box": "timesfm_s12",
+    "starts_wjt_0based": [
+      {
+        "w": 0,
+        "j": 0,
+        "t": 12
+      },
+      {
+        "w": 0,
+        "j": 1,
+        "t": 15
+      },
+      {
+        "w": 0,
+        "j": 2,
+        "t": 27
+      },
+      {
+        "w": 0,
+        "j": 3,
+        "t": 36
+      },
+      {
+        "w": 0,
+        "j": 4,
+        "t": 46
+      },
+      {
+        "w": 0,
+        "j": 5,
+        "t": 49
+      },
+      {
+        "w": 0,
+        "j": 6,
+        "t": 54
+      },
+      {
+        "w": 0,
+        "j": 7,
+        "t": 64
+      },
+      {
+        "w": 1,
+        "j": 0,
+        "t": 2
+      },
+      {
+        "w": 1,
+        "j": 1,
+        "t": 22
+      },
+      {
+        "w": 1,
+        "j": 2,
+        "t": 39
+      },
+      {
+        "w": 1,
+        "j": 3,
+        "t": 61
+      },
+      {
+        "w": 1,
+        "j": 4,
+        "t": 68
+      }
+    ]
+  },
+  "without_battery": {
+    "n_maint": 13,
+    "start_days_0based": [
+      4,
+      19,
+      25,
+      11,
+      34,
+      51,
+      63,
+      66,
+      7,
+      22,
+      39,
+      60,
+      78
+    ],
+    "start_days_1based": [
+      5,
+      20,
+      26,
+      12,
+      35,
+      52,
+      64,
+      67,
+      8,
+      23,
+      40,
+      61,
+      79
+    ],
+    "spread_min_1b": 5,
+    "spread_max_1b": 79,
+    "spread_std_1b": 23.686562740040394,
+    "LB": 6362198.314374412,
+    "first_stage_cost": 214260.0,
+    "ENS_sum": 3248.352805,
+    "n_batteries": 0,
+    "use_batteries": false,
+    "aro_variant": "t0spread",
+    "wind_mean_box": "timesfm_s12",
+    "starts_wjt_0based": [
+      {
+        "w": 0,
+        "j": 0,
+        "t": 4
+      },
+      {
+        "w": 0,
+        "j": 1,
+        "t": 19
+      },
+      {
+        "w": 0,
+        "j": 2,
+        "t": 25
+      },
+      {
+        "w": 0,
+        "j": 3,
+        "t": 11
+      },
+      {
+        "w": 0,
+        "j": 4,
+        "t": 34
+      },
+      {
+        "w": 0,
+        "j": 5,
+        "t": 51
+      },
+      {
+        "w": 0,
+        "j": 6,
+        "t": 63
+      },
+      {
+        "w": 0,
+        "j": 7,
+        "t": 66
+      },
+      {
+        "w": 1,
+        "j": 0,
+        "t": 7
+      },
+      {
+        "w": 1,
+        "j": 1,
+        "t": 22
+      },
+      {
+        "w": 1,
+        "j": 2,
+        "t": 39
+      },
+      {
+        "w": 1,
+        "j": 3,
+        "t": 60
+      },
+      {
+        "w": 1,
+        "j": 4,
+        "t": 78
+      }
+    ]
+  },
+  "moved_turbines": [
+    {
+      "w": 0,
+      "j": 0,
+      "t_with": 12,
+      "t_without": 4,
+      "delta_days": -8,
+      "delta_days_abs": 8
+    },
+    {
+      "w": 0,
+      "j": 1,
+      "t_with": 15,
+      "t_without": 19,
+      "delta_days": 4,
+      "delta_days_abs": 4
+    },
+    {
+      "w": 0,
+      "j": 2,
+      "t_with": 27,
+      "t_without": 25,
+      "delta_days": -2,
+      "delta_days_abs": 2
+    },
+    {
+      "w": 0,
+      "j": 3,
+      "t_with": 36,
+      "t_without": 11,
+      "delta_days": -25,
+      "delta_days_abs": 25
+    },
+    {
+      "w": 0,
+      "j": 4,
+      "t_with": 46,
+      "t_without": 34,
+      "delta_days": -12,
+      "delta_days_abs": 12
+    },
+    {
+      "w": 0,
+      "j": 5,
+      "t_with": 49,
+      "t_without": 51,
+      "delta_days": 2,
+      "delta_days_abs": 2
+    },
+    {
+      "w": 0,
+      "j": 6,
+      "t_with": 54,
+      "t_without": 63,
+      "delta_days": 9,
+      "delta_days_abs": 9
+    },
+    {
+      "w": 0,
+      "j": 7,
+      "t_with": 64,
+      "t_without": 66,
+      "delta_days": 2,
+      "delta_days_abs": 2
+    },
+    {
+      "w": 1,
+      "j": 0,
+      "t_with": 2,
+      "t_without": 7,
+      "delta_days": 5,
+      "delta_days_abs": 5
+    },
+    {
+      "w": 1,
+      "j": 3,
+      "t_with": 61,
+      "t_without": 60,
+      "delta_days": -1,
+      "delta_days_abs": 1
+    },
+    {
+      "w": 1,
+      "j": 4,
+      "t_with": 68,
+      "t_without": 78,
+      "delta_days": 10,
+      "delta_days_abs": 10
+    }
+  ],
+  "unchanged_turbines": [
+    {
+      "w": 1,
+      "j": 1,
+      "t": 22
+    },
+    {
+      "w": 1,
+      "j": 2,
+      "t": 39
+    }
+  ],
+  "only_with_battery": [],
+  "only_without_battery": [],
+  "n_moved": 11,
+  "n_unchanged": 2
+}
