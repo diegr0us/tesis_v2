@@ -9,11 +9,9 @@ from input_class import (
     DieselFleet,
     DieselUnit,
     Microgrid,
-    MaintenancePolicy,
     WindFleet,
     WindPark,
     load_csv_column,
-    load_degradation_rul,
     load_scenario_bounds,
     CCGConfig,
     UncertaintySet,
@@ -71,29 +69,11 @@ battery = BatteryFleet(
     )
 )
 
-_wind_parks = (
-    WindPark(prated=3.5, n_turbines=10),
-    WindPark(prated=3.5, n_turbines=6),
-)
-_n_turbines = sum(park.n_turbines for park in _wind_parks)
 wind = WindFleet(
-    parks=_wind_parks,
-    degradation=load_degradation_rul(DATA_DIR / "degradation_rul.json"),
-    maintenance=MaintenancePolicy(
-        v_pr=10.0,
-        c_pr=500.0,
-        v_co=50.0,
-        c_co=3000.0,
-        duration_days=3,
-        crew_cost=1000.0,
-        n_crew=1,
-        m_crew=1,
+    parks=(
+        WindPark(prated=3.5, n_turbines=10),
+        WindPark(prated=3.5, n_turbines=6),
     ),
-    # Señal de degradación por turbina (ids 1..100 en data/degradation_rul.json).
-    # Default: turbina i ← componente i+1. Editable, p.ej. [7, 42, 99, ...].
-    turbine_component=list(range(1, _n_turbines + 1)),
-    # t0 de observación por turbina (escalar o lista de largo Nt).
-    t0_obs=[(i * 5) % 120 for i in range(_n_turbines)],
 )
 
 

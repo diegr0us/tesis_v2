@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -110,140 +108,8 @@ class WindPark:
 
 
 @dataclass(frozen=True)
-class DegradationCatalog:
-    """RUL por componente y t0: BOC [L, U] en días (data/degradation_rul.json)."""
-
-    step_days: int
-    unit: str
-    confidence: float
-    alpha: float
-    bounds: dict[int, dict[int, tuple[int, int]]]
-
-    def boc(self, component_id: int, t0: int) -> tuple[int, int]:
-        by_t0 = self.bounds.get(component_id)
-        if by_t0 is None:
-            ids = sorted(self.bounds)
-            raise ValueError(
-                f"component_id={component_id} not in degradation catalog "
-                f"(ids {ids[0]}..{ids[-1]})"
-            )
-        pair = by_t0.get(t0)
-        if pair is None:
-            tmin, tmax = min(by_t0), max(by_t0)
-            raise ValueError(
-                f"no BOC for component={component_id} at t0={t0} "
-                f"(available t0 in [{tmin}, {tmax}])"
-            )
-        return pair
-
-
-@dataclass(frozen=True)
-class WindTurbine:
-    """Turbina individual: señal de degradación, t0 y BOC de RUL en t0."""
-
-    component_id: int
-    t0_obs: int
-    park_index: int
-    boc_lower: int
-    boc_upper: int
-
-    @property
-    def t_dw(self) -> int:
-        """Día físico 1-based del extremo inferior del BOC de falla."""
-        return self.boc_lower
-
-    @property
-    def t_up(self) -> int:
-        """Día físico 1-based del extremo superior del BOC de falla."""
-        return self.boc_upper
-
-@dataclass(frozen=True)
-class MaintenancePolicy:
-    """Costos y recursos de mantenimiento de la flota (eq. 5/6)."""
-
-    v_pr: float = 10.0
-    c_pr: float = 500.0
-    v_co: float = 50.0
-    c_co: float = 3000.0
-    duration_days: int = 3
-    crew_cost: float = 1000.0
-    n_crew: int = 1
-    m_crew: int = 1
-
-    def __post_init__(self) -> None:
-        if self.duration_days < 1:
-            raise ValueError("duration_days must be >= 1")
-        if self.n_crew < 1:
-            raise ValueError("n_crew must be >= 1")
-        if self.m_crew < 1:
-            raise ValueError("m_crew must be >= 1")
-
-def _as_int_tuple(value: int | Sequence[int], n: int, name: str) -> tuple[int, ...]:
-    if isinstance(value, (int, np.integer)):
-        return (int(value),) * n
-    seq = tuple(int(v) for v in value)
-    if len(seq) != n:
-        raise ValueError(f"{name} must be a scalar or a sequence of length {n}, got {len(seq)}")
-    return seq
-
-def _build_turbines(
-    parks: tuple[WindPark, ...],
-    component_ids: Sequence[int] | None,
-    t0_obs: int | Sequence[int],
-    degradation: DegradationCatalog,
-    ) -> tuple[WindTurbine, ...]:
-    counts = [park.n_turbines for park in parks]
-    if any(n < 1 for n in counts):
-        raise ValueError("each park must have n_turbines >= 1")
-    n_total = int(sum(counts))
-    ids = (
-        tuple(range(1, n_total + 1))
-        if component_ids is None
-        else tuple(int(i) for i in component_ids)
-    )
-    if len(ids) != n_total:
-        raise ValueError(
-            f"turbine_component must have length Nt={n_total}, got {len(ids)}"
-        )
-    if any(i < 1 for i in ids):
-        raise ValueError("turbine_component ids must be >= 1")
-    t0s = _as_int_tuple(t0_obs, n_total, "t0_obs")
-    turbines: list[WindTurbine] = []
-    k = 0
-    for park_index, n_park in enumerate(counts):
-        for _ in range(n_park):
-            boc_lower, boc_upper = degradation.boc(ids[k], t0s[k])
-            turbines.append(
-                WindTurbine(
-                    component_id=ids[k],
-                    t0_obs=t0s[k],
-                    park_index=park_index,
-                    boc_lower=boc_lower,
-                    boc_upper=boc_upper,
-                )
-            )
-            k += 1
-    return tuple(turbines)
-
-
-@dataclass(frozen=True)
 class WindFleet:
     parks: tuple[WindPark, ...]
-    degradation: DegradationCatalog
-    maintenance: MaintenancePolicy = MaintenancePolicy()
-    turbine_component: Sequence[int] | None = None
-    t0_obs: int | Sequence[int] = 0
-    turbines: tuple[WindTurbine, ...] = field(init=False)
-
-    def __post_init__(self) -> None:
-        turbines = _build_turbines(
-            self.parks, self.turbine_component, self.t0_obs, self.degradation
-        )
-        object.__setattr__(self, "turbines", turbines)
-        object.__setattr__(
-            self, "turbine_component", tuple(t.component_id for t in turbines)
-        )
-        object.__setattr__(self, "t0_obs", tuple(t.t0_obs for t in turbines))
 
     @property
     def n_parks(self) -> int:
@@ -251,7 +117,7 @@ class WindFleet:
 
     @property
     def n_turbines_total(self) -> int:
-        return len(self.turbines)
+        return int(sum(park.n_turbines for park in self.parks))
 
     @property
     def prated(self) -> np.ndarray:
@@ -265,75 +131,6 @@ class WindFleet:
     def park_rated(self) -> np.ndarray:
         return self.n_turbines * self.prated
 
-    @property
-    def component_ids(self) -> np.ndarray:
-        return _as_array(self.turbine_component, dtype=int)
-
-    @property
-    def observation_times(self) -> np.ndarray:
-        return _as_array(self.t0_obs, dtype=int)
-
-    @property
-    def turbine_park_index(self) -> np.ndarray:
-        return _as_array([t.park_index for t in self.turbines], dtype=int)
-
-    @property
-    def boc_lower(self) -> np.ndarray:
-        return _as_array([t.boc_lower for t in self.turbines], dtype=int)
-
-    @property
-    def boc_upper(self) -> np.ndarray:
-        return _as_array([t.boc_upper for t in self.turbines], dtype=int)
-
-    @property
-    def boc(self) -> np.ndarray:
-        """BOC de RUL en t0, shape (Nt, 2): columnas [L, U] en días."""
-        return np.column_stack((self.boc_lower, self.boc_upper))
-
-    def _split_by_park(self, values: np.ndarray) -> tuple[np.ndarray, ...]:
-        out: list[np.ndarray] = []
-        k = 0
-        for n in self.n_turbines:
-            n_int = int(n)
-            out.append(values[k : k + n_int])
-            k += n_int
-        return tuple(out)
-
-    @property
-    def t_dw(self) -> np.ndarray:
-        return self.boc_lower
-
-    @property
-    def t_up(self) -> np.ndarray:
-        return self.boc_upper
-
-    @property
-    def t_dw_by_park(self) -> tuple[np.ndarray, ...]:
-        return self._split_by_park(self.boc_lower)
-
-    @property
-    def t_up_by_park(self) -> tuple[np.ndarray, ...]:
-        return self._split_by_park(self.boc_upper)
-
-    def alpha_hat(self, horizon: int) -> tuple[np.ndarray, ...]:
-        """α̂_{j,w,t} por parque, shape (n_turbines_w, T); t 0-based ↔ día físico t+1."""
-        policy = self.maintenance
-        days = np.arange(1, horizon + 1)
-        result: list[np.ndarray] = []
-        for dw, up in zip(self.t_dw_by_park, self.t_up_by_park):
-            preventive = policy.v_pr * (up[:, None] - days) + policy.c_pr
-            corrective = policy.v_co * (days - dw[:, None]) + policy.c_co
-            alpha = np.where(
-                days < dw[:, None],
-                preventive,
-                np.where(
-                    days < up[:, None],
-                    np.maximum(preventive, corrective),
-                    corrective,
-                ),
-            )
-            result.append(alpha)
-        return tuple(result)
 
 @dataclass(frozen=True)
 class WindPowerSeries:
@@ -378,23 +175,6 @@ class Microgrid:
 def load_csv_column(path: str | Path, column: str) -> np.ndarray:
     return pd.read_csv(path)[column].to_numpy()
 
-
-def load_degradation_rul(path: str | Path) -> DegradationCatalog:
-    path = Path(path)
-    with path.open() as handle:
-        raw = json.load(handle)
-    bounds: dict[int, dict[int, tuple[int, int]]] = {}
-    for component_id, series in raw["components"].items():
-        bounds[int(component_id)] = {
-            int(t0): (int(pair[0]), int(pair[1])) for t0, pair in series.items()
-        }
-    return DegradationCatalog(
-        step_days=int(raw["step_days"]),
-        unit=str(raw["unit"]),
-        confidence=float(raw["confidence"]),
-        alpha=float(raw["alpha"]),
-        bounds=bounds,
-    )
 
 def load_scenario_bounds(data_dir: str | Path) -> ScenarioBounds:
     data_dir = Path(data_dir)
@@ -451,10 +231,7 @@ class WorstCaseScenario:
 @dataclass(frozen=True)
 class FirstStageSolution:
     commitment: np.ndarray               # (G, H, T)
-    wind_availability: np.ndarray        # (W, T)
-    maintenance_start: dict[tuple[int, int, int], float] | None = None  # (j, w, t) -> v
-    maintenance_active: dict[tuple[int, int, int], float] | None = None  # (j, w, t) -> m
-    crews: np.ndarray | None = None      # (W, T) 
+    wind_availability: np.ndarray        # (W, T)  turbinas disponibles (todas, en operación) 
 
 @dataclass(frozen=True)
 class SecondStageDispatch:
