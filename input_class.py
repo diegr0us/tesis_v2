@@ -222,6 +222,7 @@ class CCGConfig:
     master_output_flag: int = 0
     oracle_output_flag: int = 0
     adm_output_flag: int = 0
+    exact_output_flag: int = 0
 
 @dataclass(frozen=True)
 class WorstCaseScenario:
@@ -255,11 +256,12 @@ class MasterResult:
 @dataclass(frozen=True)
 class OracleResult:
     scenario: WorstCaseScenario
-    dispatch: SecondStageDispatch
-    LB: float          # LB^{orc} = mejor Q factible
-    UB: float | None           # UB^{orc} global; NaN si no hay certificado
+    exact_objective_cost: float | None
     status: int
     has_incumbent: bool
+    dispatch: SecondStageDispatch | None = None
+    LB: float | None = None   # LB^{orc} = mejor Q factible
+    UB: float | None = None   # UB^{orc} global; NaN si no hay certificado
 
 @dataclass(frozen=True)
 class CCGIteration:
@@ -279,6 +281,7 @@ class CCGResult:
     upper_bound: float
     relative_gap: float
     history: tuple[CCGIteration, ...]
+    adm_total_cost: float | None = None  # ORACLE.UB_U + MASTER.first_stage_cost
 
 # Conjunto de incertidumbre
 
@@ -351,6 +354,11 @@ def _attribute_set(
         gamma_mu=np.full((1, n_weeks), gamma_mu, dtype=float),
         sign=sign,
     )
+
+@dataclass(frozen=True)
+class ExactResult:
+    OBJECTIVE_COST: float
+    WORST_CASE_SCENARIO: WorstCaseScenario
 
 @dataclass(frozen=True)
 class ADMResult:

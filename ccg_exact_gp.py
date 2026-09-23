@@ -3,14 +3,14 @@ from input_class import (
     CCGIteration,
     CCGResult,
     Microgrid,
-    OracleResult,
     UncertaintySet,
+    OracleResult,
 )
 from master import solve_master_problem
-from adm_gp import oracle_adm
+from exact_oracle_gp import oracle_exact
 
 
-def ccg_adm(
+def ccg_exact_gp(
     *,
     grid: Microgrid,
     U_hat: UncertaintySet,
@@ -18,7 +18,7 @@ def ccg_adm(
     ) -> CCGResult:
     """
     Algoritmo 3.1. Column-and-constraint generation para el ARO (2.14),
-    con oráculo inexacto O_ADM.
+    con oráculo exacto
     """
     LOWERBOUND = -float("inf")
     UPPERBOUND = float("inf")
@@ -26,41 +26,33 @@ def ccg_adm(
     HISTORY = []
     solution = None
     relative_gap = None
-    adm_total_cost = None
+    exact_total_cost = None
     i = 0
 
     while i < CONFIG.max_iterations:
         print(f" ===== Iteration master {i} ===== ")
         MASTER = solve_master_problem(grid=grid, SCENARIOS=SCENARIOS, CONFIG=CONFIG)
-        print(f"MASTER.relative_gap: {MASTER.relative_gap}")
         if not MASTER.has_incumbent:
             break
         solution = MASTER.solution
         LOWERBOUND = MASTER.objective
-        ORACLE = oracle_adm(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
-        adm_total_cost = ORACLE.UB_U + MASTER.first_stage_cost
+        print(f" ===== Oracle exact {i} ===== ")
+        ORACLE = oracle_exact(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
+        exact_total_cost = ORACLE.exact_objective_cost + MASTER.first_stage_cost
         print(f"LOWERBOUND: {LOWERBOUND}")
-        print(f"ORACLE.UB_U + MASTER.first_stage_cost: {adm_total_cost}")
-        if adm_total_cost < LOWERBOUND:
-            break
-        SCENARIOS.append(ORACLE.WORST_CASE_SCENARIO)
+        print(f"UPPERBOUND: {exact_total_cost}")
+        SCENARIOS.append(ORACLE.scenario)
         i += 1
+        relative_gap = (exact_total_cost - LOWERBOUND) / (LOWERBOUND + 1e-6)
         HISTORY.append(CCGIteration(
             iteration=i,
             scenario_count=len(SCENARIOS),
             lower_bound=LOWERBOUND,
-            upper_bound=None,
-            relative_gap=None,
+            upper_bound=exact_total_cost,
+            relative_gap=relative_gap,
             master_result=MASTER,
-            oracle_result=OracleResult(
-                scenario=ORACLE.WORST_CASE_SCENARIO,
-                dispatch=ORACLE.HISTORY[-1].ORACLE_Y.Y_FIX,
-                LB=ORACLE.LB_Y,
-                UB=None,
-                status=MASTER.status,
-                has_incumbent=True,
-            ),
-            scenarios=ORACLE.WORST_CASE_SCENARIO,
+            oracle_result=ORACLE,
+            scenarios=ORACLE.scenario,
         ))
         if relative_gap is not None and relative_gap <= CONFIG.relative_gap:
             break
@@ -71,5 +63,4 @@ def ccg_adm(
         upper_bound=UPPERBOUND,
         relative_gap=relative_gap if relative_gap is not None else float("inf"),
         history=tuple(HISTORY),
-        adm_total_cost=adm_total_cost,
     )

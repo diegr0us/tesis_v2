@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from ccg_adm_gp import ccg_adm
+from ccg_exact_gp import ccg_exact_gp
 from input_class import (
     BatteryFleet,
     BatteryUnit,
@@ -34,7 +35,8 @@ DATA_DIR = Path("data")
 
 T0 = 1                                  # primer día del horizonte (1-indexado, como day en data/)
 S = 12                                  # Numero de semanas en el horizonte
-N_DAYS = S * DAYS_PER_WEEK              # |T| días (índice t del modelo)
+#N_DAYS = S * DAYS_PER_WEEK             # |T| días (índice t del modelo)
+N_DAYS = 1                              # 1 para correr con un solo día
 N_HOURS = N_DAYS * HOURS_PER_DAY
 
 # =============================================================================
@@ -47,7 +49,8 @@ GAMMA_H_DEMAND = 8.0
 GAMMA_H_WIND = 8.0
 GAMMA_MU_DEMAND = 3.0
 GAMMA_MU_WIND = 3.0
-MEAN_BUDGET_HORIZON = DAYS_PER_WEEK
+# MEAN_BUDGET_HORIZON = DAYS_PER_WEEK # DAYS_PER_WEEK por defecto
+MEAN_BUDGET_HORIZON = 1  # 1 para correr con un solo día
 DELTA_MU_MIN = 1e-8                     # evita ω = Δ / (|H| Δ^μ) con Δ^μ = 0
 
 diesel = DieselFleet(
@@ -173,22 +176,28 @@ CONFIG = CCGConfig(
     oracle_adm_max_iterations=100,
     print_oracle_iterations=False,
     use_batteries=True,
-    master_output_flag=1, 
+    master_output_flag=0,
     oracle_output_flag=0,
     adm_output_flag=0,
+    exact_output_flag=1,
 )
 
 _NO_CERT_MSG = "sin garantía de optimalidad"
-
 
 def _format_metric(label: str, value: float | None) -> str:
     if value is None or value == float("inf"):
         return f"{label} ({_NO_CERT_MSG})"
     return f"{label}={value:.6g}"
 
+ORACLE_METHOD = "exact"
 
 if __name__ == "__main__":
-    result = ccg_adm(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
+    if ORACLE_METHOD == "exact":
+        result = ccg_exact_gp(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
+    elif ORACLE_METHOD == "adm":
+        result = ccg_adm(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
+    else:
+        raise ValueError(f"Método de oráculo inválido: {ORACLE_METHOD}")
     print(
         f"{_format_metric('LB', result.lower_bound)}  "
         f"{_format_metric('UB', result.upper_bound)}  "
@@ -201,4 +210,9 @@ if __name__ == "__main__":
             f"{_format_metric('UB', it.upper_bound)}  "
             f"{_format_metric('gap', it.relative_gap)}  "
             f"escenarios={it.scenario_count}"
+        )
+    if result.adm_total_cost is not None:
+        print(
+            "ORACLE.UB_U + MASTER.first_stage_cost="
+            f"{result.adm_total_cost:.6g}"
         )
