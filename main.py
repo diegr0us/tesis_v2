@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from ccg_adm_gp import ccg_adm
+from ccg_cooperative import ccg_cooperative
 from ccg_exact_gp import ccg_exact_gp
 from input_class import (
     BatteryFleet,
@@ -189,13 +190,15 @@ def _format_metric(label: str, value: float | None) -> str:
         return f"{label} ({_NO_CERT_MSG})"
     return f"{label}={value:.6g}"
 
-ORACLE_METHOD = "exact"
+ORACLE_METHOD = "cooperative"
 
 if __name__ == "__main__":
     if ORACLE_METHOD == "exact":
         result = ccg_exact_gp(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
     elif ORACLE_METHOD == "adm":
         result = ccg_adm(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
+    elif ORACLE_METHOD == "cooperative":
+        result = ccg_cooperative(grid=grid, U_hat=U_hat, CONFIG=CONFIG)
     else:
         raise ValueError(f"Método de oráculo inválido: {ORACLE_METHOD}")
     print(
