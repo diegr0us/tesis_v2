@@ -217,6 +217,7 @@ class CCGConfig:
     print_exact_callback: bool = False
     stop_exact_callback: bool = False  # corta al hallar un corte suficientemente violado
     exact_cut_fraction: float = 0.5  # 0: primer corte; 1: peor caso dentro de la cota
+    exact_time_limit: float | None = None  # segundos; con violación corta aunque la fracción no llegue a alpha
 
     # Formulación
     use_batteries: bool = True

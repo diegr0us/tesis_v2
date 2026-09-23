@@ -310,6 +310,7 @@ def oracle_exact(
         master_lb=master_lb if CONFIG.stop_exact_callback else None,
         first_stage_cost=first_stage_cost if CONFIG.stop_exact_callback else None,
         cut_fraction=CONFIG.exact_cut_fraction,
+        time_limit=CONFIG.exact_time_limit if CONFIG.stop_exact_callback else None,
     )
     monitor.model = m # Pasamos el modelo al monitor para que pueda acceder a variables y terminarlo
     try:

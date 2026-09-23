@@ -5,15 +5,17 @@ import numpy as np
 
 
 class ExactOracleMonitor:
-    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, cut_fraction=0.0): # iniciamos las variables
+    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, cut_fraction=0.0, time_limit=None): # iniciamos las variables
         # Usando self las variables son accesibles desde cualquier metodo de la clase
         self.W, self.H, self.T = W, H, T
         self.verbose = verbose # Si es True, se imprime la información del oráculo exacto en consola usando otro hilo
         # Si master_lb y first_stage_cost están definidos, el hilo detiene el oráculo cuando
-        # la violación del incumbente cubre cut_fraction de la violación que aún permite el UB.
+        # la violación del incumbente cubre cut_fraction de la violación que aún permite el UB,
+        # o cuando esa violación es positiva y el runtime alcanza time_limit.
         self.master_lb = master_lb
         self.first_stage_cost = first_stage_cost
         self.cut_fraction = cut_fraction
+        self.time_limit = time_limit
         self.model = None # modelo gurobi
         
         # variables de instancia para el oráculo exacto
@@ -25,6 +27,7 @@ class ExactOracleMonitor:
         self.lower_bound = None # mejor objetivo factible (cota inferior)
         self.upper_bound = None # mejor cota superior del árbol
         self.gap = None # (upper - lower) / max(|lower|, 1)
+        self.runtime = None # segundos de solver al último aviso del callback
         
         self._lock = threading.Lock() # Lock para sincronizar el acceso a las variables compartidas
         self._ready = threading.Event() # Evento para indicar que se ha actualizado la información del oráculo exacto
@@ -64,7 +67,21 @@ class ExactOracleMonitor:
             self.best_objective = lower
             self.best_p_wind = p_vals
             self.best_demand = d_vals
+            self.runtime = self._finite(model.cbGet(gp.GRB.Callback.RUNTIME))
             self._update_bounds(lower, upper)
+        elif (
+            where == gp.GRB.Callback.MIP
+            and self.time_limit is not None
+            and not self._stopped
+            and self.lower_bound is not None
+        ):
+            # Sin un incumbente nuevo no hay corte distinto; solo reevaluamos el tiempo
+            # sobre la violación ya guardada, para no esperar al próximo MIPSOL.
+            runtime = self._finite(model.cbGet(gp.GRB.Callback.RUNTIME))
+            if runtime is None or runtime < self.time_limit:
+                return
+            self.runtime = runtime
+            self._notify(incumbent=False)
 
     def _update_bounds(self, lower, upper):
         self.lower_bound = lower
@@ -73,10 +90,14 @@ class ExactOracleMonitor:
             self.gap = None
         else:
             self.gap = (upper - lower) / max(abs(lower), 1.0)
+        self._notify(incumbent=True)
+
+    def _notify(self, incumbent):
         if self._worker is None:
             return
         with self._lock:
-            self._unread = True
+            if incumbent:
+                self._unread = True
             self._ready.set()
 
     def _consume(self):
@@ -87,10 +108,9 @@ class ExactOracleMonitor:
                 self._unread = False # Limpiamos el indicador
                 closed = self._closed # Indica si se ha cerrado el oráculo exacto
                 self._ready.clear() # Limpiamos el evento
-            if unread:
-                if self.verbose:
-                    self._print_state() # Imprimimos la información del oráculo exacto
-                self._maybe_stop() # Verificamos si se debe detener el oráculo exacto
+            if unread and self.verbose:
+                self._print_state() # Imprimimos la información del oráculo exacto
+            self._maybe_stop() # MIPSOL o vencimiento del tiempo con una violación ya guardada
             if closed:
                 break
 
@@ -112,22 +132,37 @@ class ExactOracleMonitor:
         violation = self.lower_bound + self.first_stage_cost - self.master_lb
         if violation <= 0:
             return
-        if self.cut_fraction > 0:
-            if self.upper_bound is None:
-                return
+        violation_max = None
+        fraction_met = self.cut_fraction <= 0
+        if self.cut_fraction > 0 and self.upper_bound is not None:
             violation_max = self.upper_bound + self.first_stage_cost - self.master_lb
-            if violation_max <= 0 or violation / violation_max < self.cut_fraction:
-                return
-        else:
-            violation_max = None
+            fraction_met = violation_max > 0 and violation / violation_max >= self.cut_fraction
+        time_met = (
+            self.time_limit is not None
+            and self.runtime is not None
+            and self.runtime >= self.time_limit
+        )
+        if not (fraction_met or time_met):
+            return
         self._stopped = True
         if self.verbose:
-            if violation_max is None:
+            if fraction_met and violation_max is None:
                 detail = f"violacion={violation:.6g}"
-            else:
+            elif fraction_met:
                 detail = (
                     f"violacion={violation:.6g}/{violation_max:.6g}"
                     f"={violation / violation_max:.3g} >= {self.cut_fraction:.3g}"
+                )
+            elif violation_max is None or violation_max <= 0:
+                detail = (
+                    f"violacion={violation:.6g}"
+                    f" tiempo={self.runtime:.6g}>={self.time_limit:.6g}"
+                )
+            else:
+                detail = (
+                    f"violacion={violation:.6g}/{violation_max:.6g}"
+                    f"={violation / violation_max:.3g} < {self.cut_fraction:.3g}"
+                    f" tiempo={self.runtime:.6g}>={self.time_limit:.6g}"
                 )
             print(
                 f"[STOP] {detail}; se detiene el oráculo exacto",

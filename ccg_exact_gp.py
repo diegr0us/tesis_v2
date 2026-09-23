@@ -8,7 +8,6 @@ from input_class import (
 from master import solve_master_problem
 from exact_oracle_gp import oracle_exact
 
-
 def ccg_exact_gp(
     *,
     grid: Microgrid,
