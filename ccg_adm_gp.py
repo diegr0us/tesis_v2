@@ -54,11 +54,11 @@ def ccg_adm(
             master_result=MASTER,
             oracle_result=OracleResult(
                 scenario=ORACLE.WORST_CASE_SCENARIO,
+                status=MASTER.status,
+                has_incumbent=True,
                 dispatch=ORACLE.HISTORY[-1].ORACLE_Y.Y_FIX,
                 LB=ORACLE.LB_Y,
                 UB=None,
-                status=MASTER.status,
-                has_incumbent=True,
             ),
             scenarios=ORACLE.WORST_CASE_SCENARIO,
         ))

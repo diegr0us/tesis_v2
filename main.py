@@ -168,7 +168,7 @@ grid = Microgrid(
 )
 
 CONFIG = CCGConfig(
-    max_iterations=5,
+    max_iterations=999,
     relative_gap=1e-2,
     value_lower_bound=0.0,
     master_mip_gap=1e-2,
@@ -176,12 +176,19 @@ CONFIG = CCGConfig(
     oracle_adm_tol=1e-4,
     oracle_adm_max_iterations=100,
     print_oracle_iterations=False,
-    use_batteries=True,
+    print_exact_callback=True,
+    stop_exact_callback=True, # Detiene el oraculo exacto al encontrar un corte factible
+    exact_cut_fraction=0.4, # Fracción de la violación máxima que debe cubrir el corte, con 0 se detiene en el primer corte factible
+    use_batteries=False,
     master_output_flag=0,
     oracle_output_flag=0,
     adm_output_flag=0,
-    exact_output_flag=1,
+    exact_output_flag=0,
 )
+# how to calculate the cut fraction
+# fraction     = LB_oracle + first_stage_cost − LB_maestro
+# fraction_max = UB_oracle + first_stage_cost − LB_maestro
+# corta cuando fraction/fraction_max >= exact_cut_fraction
 
 _NO_CERT_MSG = "sin garantía de optimalidad"
 

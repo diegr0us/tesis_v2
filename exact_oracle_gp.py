@@ -1,10 +1,11 @@
 #===========================================================================
-# Oracle inexacto O_ADM(x^{nr}) sobre U^hib
+# Oracle Exacto O_EXACT(x^{nr}) sobre U^hib
 # =============================================================================
 
 import gurobipy as gp
 import numpy as np
 
+from oracle_exact_callback import ExactOracleMonitor
 from input_class import (
     CCGConfig,
     UncertaintySet,
@@ -12,7 +13,6 @@ from input_class import (
     WorstCaseScenario,
     Microgrid,
     OracleResult,
-    SecondStageDispatch,
 )
 
 def oracle_exact(
@@ -21,6 +21,8 @@ def oracle_exact(
     X0 : FirstStageSolution,
     CONFIG: CCGConfig,
     grid: Microgrid,
+    master_lb: float | None = None,
+    first_stage_cost: float | None = None,
     ) -> OracleResult:
     """
     Oráculo exacto O_EXACT(x^{nr}) sobre U^hib 
@@ -294,28 +296,55 @@ def oracle_exact(
         )
 
 
-    m.optimize()
+    if CONFIG.stop_exact_callback and (master_lb is None or first_stage_cost is None):
+        raise ValueError(
+            "stop_exact_callback requiere master_lb y first_stage_cost para detectar un corte"
+        )
+    monitor = ExactOracleMonitor(
+        p_wind,
+        demand,
+        W,
+        H,
+        T,
+        verbose=CONFIG.print_exact_callback,
+        master_lb=master_lb if CONFIG.stop_exact_callback else None,
+        first_stage_cost=first_stage_cost if CONFIG.stop_exact_callback else None,
+        cut_fraction=CONFIG.exact_cut_fraction,
+    )
+    monitor.model = m # Pasamos el modelo al monitor para que pueda acceder a variables y terminarlo
+    try:
+        m.optimize(callback=monitor.callback) # callback sera la funcion que gurobipy ejecuta en cada iteración
+    finally:
+        monitor.close()
 
-    if m.SolCount == 0:
+    # El monitor guarda el incumbente del MIPSOL. Si el callback no vio
+    # ninguna solución, se lee la que quedó en el modelo.
+    if monitor.best_objective is not None:
+        objective_cost = float(monitor.best_objective)
+        worst_case = WorstCaseScenario(
+            p_wind=monitor.best_p_wind.copy(),
+            demand=monitor.best_demand.copy(),
+        )
+    elif m.SolCount > 0:
+        objective_cost = float(m.ObjVal)
+        worst_case = WorstCaseScenario(
+            p_wind=np.array(
+                [[[p_wind[w, h, t].X for t in range(T)] for h in range(H)] for w in range(W)],
+                dtype=float,
+            ),
+            demand=np.array(
+                [[demand[h, t].X for t in range(T)] for h in range(H)],
+                dtype=float,
+            ),
+        )
+    else:
         raise RuntimeError(f"Exact oracle sin solución (status={int(m.Status)})")
 
-    OBJECTIVE_COST = float(m.ObjVal)
-    WORST_CASE_SCENARIO = WorstCaseScenario(
-        p_wind=np.array(
-            [[[p_wind[w, h, t].X for t in range(T)] for h in range(H)] for w in range(W)],
-            dtype=float,
-        ),
-        demand=np.array(
-            [[demand[h, t].X for t in range(T)] for h in range(H)],
-            dtype=float,
-        ),
-    )
-
-    status = int(m.Status)
-    has_incumbent = True if status == gp.GRB.OPTIMAL else False
-
-    return OracleResult(scenario=WORST_CASE_SCENARIO,
-        exact_objective_cost=OBJECTIVE_COST,
-        status=status,
-        has_incumbent=has_incumbent,
+    return OracleResult(
+        scenario=worst_case,
+        status=int(m.Status),
+        has_incumbent=True,
+        stopped_by_callback=monitor._stopped,
+        LB=objective_cost,
+        UB=monitor.upper_bound,
     )

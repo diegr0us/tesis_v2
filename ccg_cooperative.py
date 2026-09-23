@@ -72,23 +72,30 @@ def ccg_cooperative(
                 master_result=MASTER,
                 oracle_result=OracleResult(
                     scenario=ADM.WORST_CASE_SCENARIO,
-                    exact_objective_cost=None,
+                    status=MASTER.status,
+                    has_incumbent=True,
                     dispatch=ADM.HISTORY[-1].ORACLE_Y.Y_FIX,
                     LB=ADM.LB_Y,
                     UB=None,
-                    status=MASTER.status,
-                    has_incumbent=True,
                 ),
                 scenarios=ADM.WORST_CASE_SCENARIO,
             ))
             continue
 
         print(f" ===== Oracle exact {i} ===== ")
-        EXACT = oracle_exact(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
-        exact_total_cost = EXACT.exact_objective_cost + MASTER.first_stage_cost
-        UPPERBOUND = min(UPPERBOUND, exact_total_cost)
+        EXACT = oracle_exact(
+            U_hat=U_hat,
+            X0=solution,
+            CONFIG=CONFIG,
+            grid=grid,
+            master_lb=LOWERBOUND,
+            first_stage_cost=MASTER.first_stage_cost,
+        )
+        cost_ceiling = None if EXACT.UB is None else EXACT.UB + MASTER.first_stage_cost
+        if cost_ceiling is not None:
+            UPPERBOUND = min(UPPERBOUND, cost_ceiling)
         bound_gap = _print_bounds(LOWERBOUND, UPPERBOUND)
-        if bound_gap > CONFIG.relative_gap:
+        if bound_gap is None or bound_gap > CONFIG.relative_gap:
             SCENARIOS.append(EXACT.scenario)
         i += 1
         HISTORY.append(CCGIteration(
@@ -101,7 +108,7 @@ def ccg_cooperative(
             oracle_result=EXACT,
             scenarios=EXACT.scenario,
         ))
-        if bound_gap <= CONFIG.relative_gap:
+        if bound_gap is not None and bound_gap <= CONFIG.relative_gap:
             break
 
     if UPPERBOUND < float("inf") and LOWERBOUND > -float("inf"):

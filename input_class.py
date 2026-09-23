@@ -214,6 +214,9 @@ class CCGConfig:
     oracle_adm_tol: float = 1e-4
     oracle_adm_max_iterations: int = 100
     print_oracle_iterations: bool = True
+    print_exact_callback: bool = False
+    stop_exact_callback: bool = False  # corta al hallar un corte suficientemente violado
+    exact_cut_fraction: float = 0.5  # 0: primer corte; 1: peor caso dentro de la cota
 
     # Formulación
     use_batteries: bool = True
@@ -256,12 +259,12 @@ class MasterResult:
 @dataclass(frozen=True)
 class OracleResult:
     scenario: WorstCaseScenario
-    exact_objective_cost: float | None
     status: int
     has_incumbent: bool
     dispatch: SecondStageDispatch | None = None
     LB: float | None = None   # LB^{orc} = mejor Q factible
     UB: float | None = None   # UB^{orc} global; NaN si no hay certificado
+    stopped_by_callback: bool = False  # True si el callback detuvo el solve antes de certificar el óptimo
 
 @dataclass(frozen=True)
 class CCGIteration:
