@@ -179,7 +179,6 @@ CONFIG = CCGConfig(
     print_exact_callback=True,
     stop_exact_callback=True, # Detiene el oraculo exacto al encontrar un corte factible
     exact_cut_fraction=0.4, # Fracción de la violación máxima que debe cubrir el corte, con 0 se detiene en el primer corte factible
-    exact_time_limit=None, # Segundos; con violación corta aunque la fracción no llegue a alpha
     use_batteries=False,
     master_output_flag=0,
     oracle_output_flag=0,
@@ -187,10 +186,9 @@ CONFIG = CCGConfig(
     exact_output_flag=0,
 )
 # how to calculate the cut fraction
-# fraction     = LB_oracle + first_stage_cost − LB_maestro
-# fraction_max = UB_oracle + first_stage_cost − LB_maestro
+# fraction     = LB_Y del ADM + first_stage_cost − LB_maestro
+# fraction_max = UB del exacto + first_stage_cost − LB_maestro
 # corta cuando fraction/fraction_max >= exact_cut_fraction
-# o cuando fraction > 0 y el runtime del oráculo >= exact_time_limit
 
 _NO_CERT_MSG = "sin garantía de optimalidad"
 

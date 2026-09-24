@@ -5,18 +5,19 @@ import numpy as np
 
 
 class ExactOracleMonitor:
-    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, cut_fraction=0.0, time_limit=None): # iniciamos las variables
+    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, cut_fraction=0.0, run_adm=None): # iniciamos las variables
         # Usando self las variables son accesibles desde cualquier metodo de la clase
         self.W, self.H, self.T = W, H, T
         self.verbose = verbose # Si es True, se imprime la información del oráculo exacto en consola usando otro hilo
-        # Si master_lb y first_stage_cost están definidos, el hilo detiene el oráculo cuando
-        # la violación del incumbente cubre cut_fraction de la violación que aún permite el UB,
-        # o cuando esa violación es positiva y el runtime alcanza time_limit.
+        # Si master_lb y first_stage_cost están definidos, el hilo corre el ADM con el
+        # escenario disponible y detiene el oráculo cuando la violación de ese ADM
+        # cubre cut_fraction de la violación que aún permite el UB del exacto.
         self.master_lb = master_lb
         self.first_stage_cost = first_stage_cost
         self.cut_fraction = cut_fraction
-        self.time_limit = time_limit
+        self._run_adm = run_adm
         self.model = None # modelo gurobi
+        self.adm_result = None # ADM que justificó el corte, si lo hubo
         
         # variables de instancia para el oráculo exacto
         self._p_vars = [p_wind[w, h, t] for w in range(W) for h in range(H) for t in range(T)]
@@ -27,7 +28,6 @@ class ExactOracleMonitor:
         self.lower_bound = None # mejor objetivo factible (cota inferior)
         self.upper_bound = None # mejor cota superior del árbol
         self.gap = None # (upper - lower) / max(|lower|, 1)
-        self.runtime = None # segundos de solver al último aviso del callback
         
         self._lock = threading.Lock() # Lock para sincronizar el acceso a las variables compartidas
         self._ready = threading.Event() # Evento para indicar que se ha actualizado la información del oráculo exacto
@@ -37,80 +37,69 @@ class ExactOracleMonitor:
             self._worker = threading.Thread(target=self._consume, daemon=True) # la funcion _consume es la que se ejecuta en el hilo
             self._worker.start() # iniciamos el hilo y devuelve el control al hilo principal
 
-        self._stopped = False
+        self._stopped = False # Indica si se ha detenido el oráculo exacto
         self._unread = False # Indica si se ha actualizado la información del oráculo exacto
-        self._closed = False
+        self._closed = False # Indica si se ha cerrado el oráculo exacto
         
 
-    @staticmethod
+    @staticmethod # Funcion estática que convierte valores infinitos a None y los convierte a float
     def _finite(value):
         if abs(value) >= gp.GRB.INFINITY:
             return None
         return float(value)
 
     def close(self):
-        # Cierra el oráculo exacto, deteniendo el hilo de impresión en consola si es que existe
-        if self._worker is None:
+        # Detiene el worker en caso de que el oráculo exacto se haya cerrado
+        if self._worker is None: # No hace nada si el hilo no existe
             return
         with self._lock: # El otro hilo debe esperar a que se complete la operación para poder continuar
-            self._closed = True
+            self._closed = True # Indicamos que se ha cerrado el oráculo exacto
         self._ready.set() # Indicamos actualizacion de informacion
         self._worker.join() # Esperamos a que el hilo termine
         self._worker = None # Limpiamos el hilo
 
-    def callback(self, model, where):
-        if where == gp.GRB.Callback.MIPSOL: # Se activa si se encuentra una solución factible mejor que la mejor solución factible encontrada hasta ese momento
-            lower = self._finite(model.cbGet(gp.GRB.Callback.MIPSOL_OBJBST)) # mejor cota inferior encontrada hasta ese momento
-            upper = self._finite(model.cbGet(gp.GRB.Callback.MIPSOL_OBJBND)) # mejor cota superior encontrada hasta ese momento
-            p_vals = np.array(model.cbGetSolution(self._p_vars), dtype=float).reshape(self.W, self.H, self.T)
-            d_vals = np.array(model.cbGetSolution(self._d_vars), dtype=float).reshape(self.H, self.T)
+    def callback(self, model, where): # Callback que se ejecuta en cada iteración del MIPSOL
+        if where != gp.GRB.Callback.MIPSOL: # Se activa si se encuentra una solución factible mejor que la mejor solución factible encontrada hasta ese momento
+            return
+        lower = self._finite(model.cbGet(gp.GRB.Callback.MIPSOL_OBJBST)) # mejor cota inferior encontrada hasta ese momento
+        upper = self._finite(model.cbGet(gp.GRB.Callback.MIPSOL_OBJBND)) # mejor cota superior encontrada hasta ese momento
+        p_vals = np.array(model.cbGetSolution(self._p_vars), dtype=float).reshape(self.W, self.H, self.T)
+        d_vals = np.array(model.cbGetSolution(self._d_vars), dtype=float).reshape(self.H, self.T)
+        self._update_bounds(lower, upper, p_vals, d_vals)
+
+    def _update_bounds(self, lower, upper, p_vals, d_vals):
+        if lower is None or upper is None:
+            gap = None
+        else:
+            gap = (upper - lower) / max(abs(lower), 1.0)
+        with self._lock:
             self.best_objective = lower
             self.best_p_wind = p_vals
             self.best_demand = d_vals
-            self.runtime = self._finite(model.cbGet(gp.GRB.Callback.RUNTIME))
-            self._update_bounds(lower, upper)
-        elif (
-            where == gp.GRB.Callback.MIP
-            and self.time_limit is not None
-            and not self._stopped
-            and self.lower_bound is not None
-        ):
-            # Sin un incumbente nuevo no hay corte distinto; solo reevaluamos el tiempo
-            # sobre la violación ya guardada, para no esperar al próximo MIPSOL.
-            runtime = self._finite(model.cbGet(gp.GRB.Callback.RUNTIME))
-            if runtime is None or runtime < self.time_limit:
-                return
-            self.runtime = runtime
-            self._notify(incumbent=False)
-
-    def _update_bounds(self, lower, upper):
-        self.lower_bound = lower
-        self.upper_bound = upper
-        if lower is None or upper is None:
-            self.gap = None
-        else:
-            self.gap = (upper - lower) / max(abs(lower), 1.0)
-        self._notify(incumbent=True)
-
-    def _notify(self, incumbent):
-        if self._worker is None:
-            return
-        with self._lock:
-            if incumbent:
+            self.lower_bound = lower
+            self.upper_bound = upper
+            self.gap = gap
+            if self._worker is not None:
                 self._unread = True
-            self._ready.set()
+                self._ready.set()
 
     def _consume(self):
+        # Imprime el estado del exacto y, con un incumbente nuevo, corre el ADM
+        # sobre la copia disponible en ese momento. Las soluciones que lleguen
+        # mientras el ADM corre quedan para la próxima pasada.
         while True:
             self._ready.wait() # Esperamos a un aviso del otro hilo
             with self._lock:
                 unread = self._unread # Indica si se ha actualizado la información del oráculo exacto
                 self._unread = False # Limpiamos el indicador
                 closed = self._closed # Indica si se ha cerrado el oráculo exacto
+                p_wind = None if self.best_p_wind is None else self.best_p_wind.copy()
+                demand = None if self.best_demand is None else self.best_demand.copy()
                 self._ready.clear() # Limpiamos el evento
             if unread and self.verbose:
                 self._print_state() # Imprimimos la información del oráculo exacto
-            self._maybe_stop() # MIPSOL o vencimiento del tiempo con una violación ya guardada
+            if unread and not self._stopped:
+                self._maybe_stop(p_wind, demand) # ADM con el escenario disponible al empezar
             if closed:
                 break
 
@@ -120,49 +109,44 @@ class ExactOracleMonitor:
             flush=True,
         )
 
-    def _maybe_stop(self):
+    def _maybe_stop(self, p_wind, demand):
         if (
-            self.master_lb is None
+            self._run_adm is None
+            or self.master_lb is None
             or self.first_stage_cost is None
             or self._stopped
             or self.model is None
-            or self.lower_bound is None
+            or p_wind is None
+            or demand is None
         ):
             return
-        violation = self.lower_bound + self.first_stage_cost - self.master_lb
+        # Sin cota del exacto no hay denominador de alpha, salvo que alpha sea 0.
+        if self.cut_fraction > 0 and self.upper_bound is None:
+            return
+        adm = self._run_adm(p_wind, demand)
+        if adm is None or adm.LB_Y is None:
+            return
+        violation = float(adm.LB_Y) + self.first_stage_cost - self.master_lb
         if violation <= 0:
             return
+        with self._lock:
+            upper = self.upper_bound
         violation_max = None
         fraction_met = self.cut_fraction <= 0
-        if self.cut_fraction > 0 and self.upper_bound is not None:
-            violation_max = self.upper_bound + self.first_stage_cost - self.master_lb
+        if self.cut_fraction > 0 and upper is not None:
+            violation_max = upper + self.first_stage_cost - self.master_lb
             fraction_met = violation_max > 0 and violation / violation_max >= self.cut_fraction
-        time_met = (
-            self.time_limit is not None
-            and self.runtime is not None
-            and self.runtime >= self.time_limit
-        )
-        if not (fraction_met or time_met):
+        if not fraction_met:
             return
         self._stopped = True
+        self.adm_result = adm
         if self.verbose:
-            if fraction_met and violation_max is None:
+            if violation_max is None:
                 detail = f"violacion={violation:.6g}"
-            elif fraction_met:
-                detail = (
-                    f"violacion={violation:.6g}/{violation_max:.6g}"
-                    f"={violation / violation_max:.3g} >= {self.cut_fraction:.3g}"
-                )
-            elif violation_max is None or violation_max <= 0:
-                detail = (
-                    f"violacion={violation:.6g}"
-                    f" tiempo={self.runtime:.6g}>={self.time_limit:.6g}"
-                )
             else:
                 detail = (
                     f"violacion={violation:.6g}/{violation_max:.6g}"
-                    f"={violation / violation_max:.3g} < {self.cut_fraction:.3g}"
-                    f" tiempo={self.runtime:.6g}>={self.time_limit:.6g}"
+                    f"={violation / violation_max:.3g} >= {self.cut_fraction:.3g}"
                 )
             print(
                 f"[STOP] {detail}; se detiene el oráculo exacto",

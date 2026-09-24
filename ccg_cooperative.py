@@ -26,6 +26,12 @@ def _print_bounds(lower: float, upper: float) -> float | None:
     return gap
 
 
+def _adm_separates(adm_total_cost: float | None, lower: float, tolerance: float) -> bool:
+    if adm_total_cost is None:
+        return False
+    return _relative_gap(adm_total_cost, lower) > tolerance
+
+
 def ccg_cooperative(
     *,
     grid: Microgrid,
@@ -35,7 +41,9 @@ def ccg_cooperative(
     """
     Algoritmo 3.1. Column-and-constraint generation para el ARO (2.14),
     con oráculo cooperativo: cortes de O_ADM y, si ADM no separa,
-    respaldo con el oráculo exacto.
+    respaldo con el oráculo exacto. La primera iteración arranca el ADM
+    con el costo unitario; las siguientes lo arrancan desde los worst-case
+    ya aceptados, del más reciente al más antiguo.
     """
     LOWERBOUND = -float("inf")
     UPPERBOUND = float("inf")
@@ -54,13 +62,32 @@ def ccg_cooperative(
         LOWERBOUND = MASTER.objective
 
         print(f" ===== Oracle ADM {i} ===== ")
-        ADM = oracle_adm(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
-        adm_total_cost = None if ADM.UB_U is None else ADM.UB_U + MASTER.first_stage_cost
-        print(f"ORACLE.UB_U + MASTER.first_stage_cost: {adm_total_cost}")
+        ADM = None
+        if not SCENARIOS:
+            print("ADM inicio: unitario")
+            candidate = oracle_adm(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
+            adm_total_cost = None if candidate.UB_U is None else candidate.UB_U + MASTER.first_stage_cost
+            print(f"ORACLE.UB_U + MASTER.first_stage_cost: {adm_total_cost}")
+            if _adm_separates(adm_total_cost, LOWERBOUND, CONFIG.relative_gap):
+                ADM = candidate
+        else:
+            for start in range(len(SCENARIOS) - 1, -1, -1):
+                print(f"ADM inicio: escenario {start}")
+                candidate = oracle_adm(
+                    U_hat=U_hat,
+                    X0=solution,
+                    CONFIG=CONFIG,
+                    grid=grid,
+                    U0=SCENARIOS[start],
+                )
+                adm_total_cost = None if candidate.UB_U is None else candidate.UB_U + MASTER.first_stage_cost
+                print(f"ORACLE.UB_U + MASTER.first_stage_cost: {adm_total_cost}")
+                if _adm_separates(adm_total_cost, LOWERBOUND, CONFIG.relative_gap):
+                    ADM = candidate
+                    break
         bound_gap = _print_bounds(LOWERBOUND, UPPERBOUND)
         recorded_upper = None if UPPERBOUND == float("inf") else UPPERBOUND
-        adm_gap = None if adm_total_cost is None else _relative_gap(adm_total_cost, LOWERBOUND)
-        if adm_gap is not None and adm_gap > CONFIG.relative_gap:
+        if ADM is not None:
             SCENARIOS.append(ADM.WORST_CASE_SCENARIO)
             i += 1
             HISTORY.append(CCGIteration(
@@ -80,7 +107,7 @@ def ccg_cooperative(
                 ),
                 scenarios=ADM.WORST_CASE_SCENARIO,
             ))
-            continue
+            continue # vuelve al inicio del while
 
         print(f" ===== Oracle exact {i} ===== ")
         EXACT = oracle_exact(

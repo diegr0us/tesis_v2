@@ -5,6 +5,7 @@
 import gurobipy as gp
 import numpy as np
 
+from adm_highs import oracle_adm as oracle_adm_highs
 from oracle_exact_callback import ExactOracleMonitor
 from input_class import (
     CCGConfig,
@@ -300,6 +301,15 @@ def oracle_exact(
         raise ValueError(
             "stop_exact_callback requiere master_lb y first_stage_cost para detectar un corte"
         )
+    def _run_adm(p_wind_vals, demand_vals):
+        return oracle_adm_highs(
+            U_hat=U_hat,
+            X0=X0,
+            CONFIG=CONFIG,
+            grid=grid,
+            U0=WorstCaseScenario(p_wind=p_wind_vals, demand=demand_vals),
+        )
+
     monitor = ExactOracleMonitor(
         p_wind,
         demand,
@@ -310,13 +320,28 @@ def oracle_exact(
         master_lb=master_lb if CONFIG.stop_exact_callback else None,
         first_stage_cost=first_stage_cost if CONFIG.stop_exact_callback else None,
         cut_fraction=CONFIG.exact_cut_fraction,
-        time_limit=CONFIG.exact_time_limit if CONFIG.stop_exact_callback else None,
+        run_adm=_run_adm if CONFIG.stop_exact_callback else None,
     )
     monitor.model = m # Pasamos el modelo al monitor para que pueda acceder a variables y terminarlo
     try:
         m.optimize(callback=monitor.callback) # callback sera la funcion que gurobipy ejecuta en cada iteración
     finally:
         monitor.close()
+
+    # Si el ADM de HiGHS cubrió la fracción de la cota del exacto, el corte
+    # sale de ese ADM. El UB sigue siendo el del exacto.
+    if monitor.adm_result is not None:
+        adm = monitor.adm_result
+        dispatch = adm.HISTORY[-1].ORACLE_Y.Y_FIX if adm.HISTORY else None
+        return OracleResult(
+            scenario=adm.WORST_CASE_SCENARIO,
+            status=int(m.Status),
+            has_incumbent=True,
+            dispatch=dispatch,
+            stopped_by_callback=True,
+            LB=float(adm.LB_Y),
+            UB=monitor.upper_bound,
+        )
 
     # El monitor guarda el incumbente del MIPSOL. Si el callback no vio
     # ninguna solución, se lee la que quedó en el modelo.

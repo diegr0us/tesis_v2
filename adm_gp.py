@@ -47,8 +47,13 @@ def oracle_adm(
     X0 : FirstStageSolution,
     CONFIG: CCGConfig,
     grid: Microgrid,
+    U0: WorstCaseScenario | None = None,
     ) -> ADMResult:
-    U_FIX, UB_U = u_init(U_hat=U_hat, X0=X0, CONFIG=CONFIG, grid=grid)
+    if U0 is None:
+        U_FIX, UB_U = u_init(U_hat=U_hat, X0=X0, CONFIG=CONFIG, grid=grid)
+    else:
+        U_FIX = U0
+        UB_U = None
     LB_Y = -np.inf
     K = 0
     HISTORY = []
