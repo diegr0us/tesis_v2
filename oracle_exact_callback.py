@@ -5,15 +5,18 @@ import numpy as np
 
 
 class ExactOracleMonitor:
-    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, cut_fraction=0.0, run_adm=None): # iniciamos las variables
+    def __init__(self, p_wind, demand, W, H, T, verbose=False, master_lb=None, first_stage_cost=None, relative_gap=None, cut_fraction=0.0, run_adm=None): # iniciamos las variables
         # Usando self las variables son accesibles desde cualquier metodo de la clase
         self.W, self.H, self.T = W, H, T
         self.verbose = verbose # Si es True, se imprime la información del oráculo exacto en consola usando otro hilo
         # Si master_lb y first_stage_cost están definidos, el hilo corre el ADM con el
         # escenario disponible y detiene el oráculo cuando la violación de ese ADM
         # cubre cut_fraction de la violación que aún permite el UB del exacto.
+        # Con relative_gap, cada nodo corta el solve si violation_max ya entra
+        # en la tolerancia del C&CG: (UB + c'x - LB_maestro) / (LB_maestro + 1e-6).
         self.master_lb = master_lb
         self.first_stage_cost = first_stage_cost
+        self.relative_gap = relative_gap
         self.cut_fraction = cut_fraction
         self._run_adm = run_adm
         self.model = None # modelo gurobi
@@ -58,7 +61,10 @@ class ExactOracleMonitor:
         self._worker.join() # Esperamos a que el hilo termine
         self._worker = None # Limpiamos el hilo
 
-    def callback(self, model, where): # Callback que se ejecuta en cada iteración del MIPSOL
+    def callback(self, model, where): # Callback en cada nodo del árbol y en cada incumbente
+        if where == gp.GRB.Callback.MIPNODE:
+            self._on_node_bound(model)
+            return
         if where != gp.GRB.Callback.MIPSOL: # Se activa si se encuentra una solución factible mejor que la mejor solución factible encontrada hasta ese momento
             return
         lower = self._finite(model.cbGet(gp.GRB.Callback.MIPSOL_OBJBST)) # mejor cota inferior encontrada hasta ese momento
@@ -67,18 +73,59 @@ class ExactOracleMonitor:
         d_vals = np.array(model.cbGetSolution(self._d_vars), dtype=float).reshape(self.H, self.T)
         self._update_bounds(lower, upper, p_vals, d_vals)
 
+    def _tighten_upper(self, upper):
+        # El llamador tiene self._lock. Conserva la cota superior más chica.
+        if upper is None:
+            return
+        if self.upper_bound is None or upper < self.upper_bound:
+            self.upper_bound = upper
+
+    def _bound_closes_gap(self, upper):
+        if (
+            upper is None
+            or self.master_lb is None
+            or self.first_stage_cost is None
+            or self.relative_gap is None
+        ):
+            return False
+        violation_max = upper + self.first_stage_cost - self.master_lb
+        return violation_max / (self.master_lb + 1e-6) <= self.relative_gap
+
+    def _on_node_bound(self, model):
+        # Al cerrar el nodo, la cota global puede bajar sin un incumbente nuevo.
+        upper = self._finite(model.cbGet(gp.GRB.Callback.MIPNODE_OBJBND))
+        if upper is None:
+            return
+        with self._lock:
+            if self._stopped:
+                return
+            self._tighten_upper(upper)
+            bound = self.upper_bound
+            if not self._bound_closes_gap(bound):
+                return
+            self._stopped = True
+        violation_max = bound + self.first_stage_cost - self.master_lb
+        ccg_gap = violation_max / (self.master_lb + 1e-6)
+        if self.verbose:
+            print(
+                f"[STOP] violation_max={violation_max:.6g} gap={ccg_gap:.3g}"
+                f" <= {self.relative_gap:.3g}; se detiene el oráculo exacto",
+                flush=True,
+            )
+        model.terminate()
+
     def _update_bounds(self, lower, upper, p_vals, d_vals):
-        if lower is None or upper is None:
-            gap = None
-        else:
-            gap = (upper - lower) / max(abs(lower), 1.0)
         with self._lock:
             self.best_objective = lower
             self.best_p_wind = p_vals
             self.best_demand = d_vals
             self.lower_bound = lower
-            self.upper_bound = upper
-            self.gap = gap
+            self._tighten_upper(upper)
+            stored_upper = self.upper_bound
+            if lower is None or stored_upper is None:
+                self.gap = None
+            else:
+                self.gap = (stored_upper - lower) / max(abs(lower), 1.0)
             if self._worker is not None:
                 self._unread = True
                 self._ready.set()

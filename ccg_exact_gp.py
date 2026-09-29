@@ -54,7 +54,8 @@ def ccg_exact_gp(
             print(f"UPPERBOUND: {UPPERBOUND}")
             relative_gap = (UPPERBOUND - LOWERBOUND) / (LOWERBOUND + 1e-6)
             recorded_upper = UPPERBOUND
-        SCENARIOS.append(ORACLE.scenario)
+        if ORACLE.scenario is not None:
+            SCENARIOS.append(ORACLE.scenario)
         i += 1
         HISTORY.append(CCGIteration(
             iteration=i,

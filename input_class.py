@@ -258,7 +258,7 @@ class MasterResult:
 
 @dataclass(frozen=True)
 class OracleResult:
-    scenario: WorstCaseScenario
+    scenario: WorstCaseScenario | None  # None si la cota cerró el gap sin factible
     status: int
     has_incumbent: bool
     dispatch: SecondStageDispatch | None = None
@@ -275,7 +275,7 @@ class CCGIteration:
     relative_gap: float | None # None si no hay certificado
     master_result: MasterResult
     oracle_result: OracleResult
-    scenarios: WorstCaseScenario
+    scenarios: WorstCaseScenario | None  # None si el exacto certificó sin escenario
 
 @dataclass(frozen=True)
 class CCGResult:

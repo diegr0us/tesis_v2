@@ -319,6 +319,7 @@ def oracle_exact(
         verbose=CONFIG.print_exact_callback,
         master_lb=master_lb if CONFIG.stop_exact_callback else None,
         first_stage_cost=first_stage_cost if CONFIG.stop_exact_callback else None,
+        relative_gap=CONFIG.relative_gap if CONFIG.stop_exact_callback else None,
         cut_fraction=CONFIG.exact_cut_fraction,
         run_adm=_run_adm if CONFIG.stop_exact_callback else None,
     )
@@ -362,6 +363,16 @@ def oracle_exact(
                 [[demand[h, t].X for t in range(T)] for h in range(H)],
                 dtype=float,
             ),
+        )
+    elif monitor._stopped and monitor.upper_bound is not None:
+        # La cota del nodo ya no deja un corte, antes de cualquier factible.
+        return OracleResult(
+            scenario=None,
+            status=int(m.Status),
+            has_incumbent=False,
+            stopped_by_callback=True,
+            LB=None,
+            UB=monitor.upper_bound,
         )
     else:
         raise RuntimeError(f"Exact oracle sin solución (status={int(m.Status)})")

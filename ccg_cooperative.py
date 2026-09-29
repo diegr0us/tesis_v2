@@ -122,7 +122,7 @@ def ccg_cooperative(
         if cost_ceiling is not None:
             UPPERBOUND = min(UPPERBOUND, cost_ceiling)
         bound_gap = _print_bounds(LOWERBOUND, UPPERBOUND)
-        if bound_gap is None or bound_gap > CONFIG.relative_gap:
+        if (bound_gap is None or bound_gap > CONFIG.relative_gap) and EXACT.scenario is not None:
             SCENARIOS.append(EXACT.scenario)
         i += 1
         HISTORY.append(CCGIteration(
