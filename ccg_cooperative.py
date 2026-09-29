@@ -27,7 +27,10 @@ def _print_bounds(lower: float, upper: float) -> float | None:
 
 
 def _adm_separates(adm_total_cost: float | None, lower: float, tolerance: float) -> bool:
+    # Función que verifica si el costo total del ADM es mayor que el lower bound 
+    # con un margen de error dado por la tolerancia
     if adm_total_cost is None:
+        # Si el costo total del ADM es None, entonces no separa
         return False
     return _relative_gap(adm_total_cost, lower) > tolerance
 

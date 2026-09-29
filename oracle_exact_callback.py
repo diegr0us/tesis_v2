@@ -74,13 +74,16 @@ class ExactOracleMonitor:
         self._update_bounds(lower, upper, p_vals, d_vals)
 
     def _tighten_upper(self, upper):
-        # El llamador tiene self._lock. Conserva la cota superior más chica.
+        # Conserva la cota superior más chica del oraculo exacto
+        # El llamador tiene self._lock.
         if upper is None:
             return
         if self.upper_bound is None or upper < self.upper_bound:
             self.upper_bound = upper
 
     def _bound_closes_gap(self, upper):
+        # Compara le cota superior del oraculo exacto con el lower bpund del maestrro para ver si la solucion
+        # actual del maestro ya es óptima
         if (
             upper is None
             or self.master_lb is None
