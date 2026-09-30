@@ -64,16 +64,18 @@ def ccg_cooperative(
         solution = MASTER.solution
         LOWERBOUND = MASTER.objective
 
-        print(f" ===== Oracle ADM {i} ===== ")
         ADM = None
-        if not SCENARIOS:
+        run_adm = not SCENARIOS or CONFIG.adm_search
+        if run_adm:
+            print(f" ===== Oracle ADM {i} ===== ")
+        if not SCENARIOS: # Primer escenario generado por el ADM
             print("ADM inicio: unitario")
             candidate = oracle_adm(U_hat=U_hat, X0=solution, CONFIG=CONFIG, grid=grid)
             adm_total_cost = None if candidate.UB_U is None else candidate.UB_U + MASTER.first_stage_cost
             print(f"ORACLE.UB_U + MASTER.first_stage_cost: {adm_total_cost}")
             if _adm_separates(adm_total_cost, LOWERBOUND, CONFIG.relative_gap):
                 ADM = candidate
-        else:
+        elif CONFIG.adm_search:
             for start in range(len(SCENARIOS) - 1, -1, -1):
                 print(f"ADM inicio: escenario {start}")
                 candidate = oracle_adm(
@@ -88,7 +90,7 @@ def ccg_cooperative(
                 if _adm_separates(adm_total_cost, LOWERBOUND, CONFIG.relative_gap):
                     ADM = candidate
                     break
-        bound_gap = _print_bounds(LOWERBOUND, UPPERBOUND)
+        bound_gap = _print_bounds(LOWERBOUND, UPPERBOUND) if run_adm else None
         recorded_upper = None if UPPERBOUND == float("inf") else UPPERBOUND
         if ADM is not None:
             SCENARIOS.append(ADM.WORST_CASE_SCENARIO)

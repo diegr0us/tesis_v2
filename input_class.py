@@ -228,6 +228,9 @@ class CCGConfig:
     adm_output_flag: int = 0
     exact_output_flag: int = 0
 
+    # ADM
+    adm_search: bool = False
+
 @dataclass(frozen=True)
 class WorstCaseScenario:
     p_wind: np.ndarray       # (W, H, T), MW por turbina

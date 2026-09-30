@@ -185,6 +185,7 @@ CONFIG = CCGConfig(
     oracle_output_flag=0,
     adm_output_flag=0,
     exact_output_flag=0,
+    adm_search=False, # False: no rebusca el ADM desde escenarios ya aceptados
 )
 # how to calculate the cut fraction
 # fraction     = LB_Y del ADM + first_stage_cost − LB_maestro
