@@ -318,6 +318,7 @@ def oracle_exact(
         H,
         T,
         verbose=CONFIG.print_exact_callback,
+        print_bounds=CONFIG.print_exact_bounds,
         master_lb=master_lb if CONFIG.stop_exact_callback else None,
         first_stage_cost=first_stage_cost if CONFIG.stop_exact_callback else None,
         relative_gap=CONFIG.relative_gap if CONFIG.stop_exact_callback else None,

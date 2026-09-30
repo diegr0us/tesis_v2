@@ -36,8 +36,8 @@ DATA_DIR = Path("data")
 
 T0 = 1                                  # primer día del horizonte (1-indexado, como day en data/)
 S = 12                                  # Numero de semanas en el horizonte
-#N_DAYS = S * DAYS_PER_WEEK             # |T| días (índice t del modelo)
-N_DAYS = 1                              # 1 para correr con un solo día
+N_DAYS = S * DAYS_PER_WEEK             # |T| días (índice t del modelo)
+#N_DAYS = 1                              # 1 para correr con un solo día
 N_HOURS = N_DAYS * HOURS_PER_DAY
 
 # =============================================================================
@@ -50,8 +50,8 @@ GAMMA_H_DEMAND = 8.0
 GAMMA_H_WIND = 8.0
 GAMMA_MU_DEMAND = 3.0
 GAMMA_MU_WIND = 3.0
-# MEAN_BUDGET_HORIZON = DAYS_PER_WEEK # DAYS_PER_WEEK por defecto
-MEAN_BUDGET_HORIZON = 1  # 1 para correr con un solo día
+MEAN_BUDGET_HORIZON = DAYS_PER_WEEK # DAYS_PER_WEEK por defecto
+#MEAN_BUDGET_HORIZON = 1  # 1 para correr con un solo día
 DELTA_MU_MIN = 1e-8                     # evita ω = Δ / (|H| Δ^μ) con Δ^μ = 0
 
 diesel = DieselFleet(
@@ -177,14 +177,15 @@ CONFIG = CCGConfig(
     oracle_adm_max_iterations=100,
     print_oracle_iterations=False,
     print_exact_callback=True,
+    print_exact_bounds=True, # Imprime cada mejora del UB del exacto y el alpha del corte
     stop_exact_callback=True, # Detiene el oraculo exacto al encontrar un corte factible
-    exact_cut_fraction=0.4, # Fracción de la violación máxima que debe cubrir el corte, con 0 se detiene en el primer corte factible
+    exact_cut_fraction=0.3, # Fracción de la violación máxima que debe cubrir el corte, con 0 se detiene en el primer corte factible
     use_batteries=False,
     use_mean_budget=False,  # quita (H.6), el presupuesto Γ^μ de la media
     master_output_flag=0,
     oracle_output_flag=0,
     adm_output_flag=0,
-    exact_output_flag=0,
+    exact_output_flag=1,
     adm_search=False, # False: no rebusca el ADM desde escenarios ya aceptados
 )
 # how to calculate the cut fraction

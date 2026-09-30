@@ -215,6 +215,7 @@ class CCGConfig:
     oracle_adm_max_iterations: int = 100
     print_oracle_iterations: bool = True
     print_exact_callback: bool = False
+    print_exact_bounds: bool = False  # imprime cada mejora del UB del exacto y el alpha del corte
     stop_exact_callback: bool = False  # corta al hallar un corte suficientemente violado
     exact_cut_fraction: float = 0.5  # 0: primer corte del ADM; 1: cubrir la violación que certifica el exacto
 
