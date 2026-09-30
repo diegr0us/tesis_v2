@@ -180,6 +180,7 @@ CONFIG = CCGConfig(
     stop_exact_callback=True, # Detiene el oraculo exacto al encontrar un corte factible
     exact_cut_fraction=0.4, # Fracción de la violación máxima que debe cubrir el corte, con 0 se detiene en el primer corte factible
     use_batteries=False,
+    use_mean_budget=False,  # quita (H.6), el presupuesto Γ^μ de la media
     master_output_flag=0,
     oracle_output_flag=0,
     adm_output_flag=0,

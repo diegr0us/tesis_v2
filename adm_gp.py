@@ -476,30 +476,31 @@ def oracle_u_fix_y(
     )
 
     # (5) H.6'':  ∑_{t ∈ T_s} s_e ∑_h ω_{e,h,t} z_{e,h,t} ≤ Γ^μ_{e,s}
-    m.addConstrs(
-        (
-            gp.quicksum(
-                s_wind[w] * wind_set[w].omega[0, h, t] * z_wind[w, h, t]
-                for t in range(s * budget_horizon, (s + 1) * budget_horizon)
-                for h in range(H)
-            )
-            <= wind_set[w].gamma_mu[0, s]
-            for w in range(W) for s in range(n_s)
-        ),
-        name="H6_wind",
-    )
-    m.addConstrs(
-        (
-            gp.quicksum(
-                s_demand * demand_set.omega[0, h, t] * z_demand[h, t]
-                for t in range(s * budget_horizon, (s + 1) * budget_horizon)
-                for h in range(H)
-            )
-            <= demand_set.gamma_mu[0, s]
-            for s in range(n_s)
-        ),
-        name="H6_demand",
-    )
+    if CONFIG.use_mean_budget:
+        m.addConstrs(
+            (
+                gp.quicksum(
+                    s_wind[w] * wind_set[w].omega[0, h, t] * z_wind[w, h, t]
+                    for t in range(s * budget_horizon, (s + 1) * budget_horizon)
+                    for h in range(H)
+                )
+                <= wind_set[w].gamma_mu[0, s]
+                for w in range(W) for s in range(n_s)
+            ),
+            name="H6_wind",
+        )
+        m.addConstrs(
+            (
+                gp.quicksum(
+                    s_demand * demand_set.omega[0, h, t] * z_demand[h, t]
+                    for t in range(s * budget_horizon, (s + 1) * budget_horizon)
+                    for h in range(H)
+                )
+                <= demand_set.gamma_mu[0, s]
+                for s in range(n_s)
+            ),
+            name="H6_demand",
+        )
 
     m.optimize()
 

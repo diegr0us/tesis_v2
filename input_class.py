@@ -220,6 +220,7 @@ class CCGConfig:
 
     # Formulación
     use_batteries: bool = True
+    use_mean_budget: bool = True  # (H.6): presupuesto Γ^μ de la media por bloque
 
     # Ejecución
     master_output_flag: int = 0
